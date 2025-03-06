@@ -82,8 +82,12 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'root',
+        'PASSWORD' : '08d69vrbe0cVHo6qS6AMeMVN',
+        'HOST' : 'bromo.liara.cloud',
+        'POST' : '34188',
     }
 }
 
