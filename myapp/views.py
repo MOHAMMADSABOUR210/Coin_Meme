@@ -3,7 +3,7 @@ from rest_framework import generics,status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework.views import APIView
-from .serializers import LoginSerializer, RegisterSerializer,ProfileSerializer ,ProfileEditSerializer
+from .serializers import LoginSerializer,ProfileSerializer ,ProfileEditSerializer
 from rest_framework.decorators import api_view, permission_classes,authentication_classes
 from rest_framework.permissions import IsAuthenticated
 from .models import Wallet, Transaction, Message
@@ -11,9 +11,11 @@ from decimal import Decimal
 from .serializers import TransactionSerializer
 from django.utils.dateparse import parse_date
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from django.db.models import Sum, Count
+from django.db.models import Sum
 from django.contrib.auth.models import User
 import uuid
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 @api_view(['POST'])
@@ -46,16 +48,21 @@ def register_view(request):
 
         if User.objects.filter(username=username).exists():
             return Response({"error": "Username already exists."}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         user = User.objects.create_user(username=username, email=email, password=password)
 
-        if not hasattr(user, 'wallet'):
-            wallet = Wallet.objects.create(user=user, address=uuid.uuid4())  
-            wallet.save()
-            return Response({"message": "User registered successfully.", "wallet_address": str(wallet.address)}, status=status.HTTP_201_CREATED)
-        else:
-            return Response({"message": "User already has a wallet.", "wallet_address": str(user.wallet.address)}, status=status.HTTP_200_OK)
+        wallet, created = Wallet.objects.get_or_create(user=user, defaults={"address": uuid.uuid4()})
 
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+
+        return Response({
+            "message": "User registered successfully.",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "wallet_address": str(wallet.address)
+        }, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])
@@ -235,3 +242,10 @@ def check_balance(request):
     
     except Wallet.DoesNotExist:
         return Response({"error": "Wallet not found."}, status=404)
+    
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        if request.content_type != 'application/json':
+            return Response({"error": "Content-Type must be application/json"}, status=status.HTTP_400_BAD_REQUEST)
+        return super().post(request, *args, **kwargs)
