@@ -3,15 +3,17 @@ from rest_framework import generics,status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework.views import APIView
-from django.contrib.auth.models import User
-from .serializers import LoginSerializer, RegisterSerializer, ProfileEditSerializer
-from rest_framework.decorators import api_view, permission_classes
+from .serializers import LoginSerializer, RegisterSerializer,ProfileSerializer ,ProfileEditSerializer
+from rest_framework.decorators import api_view, permission_classes,authentication_classes
 from rest_framework.permissions import IsAuthenticated
-from .models import Wallet, Transaction
+from .models import Wallet, Transaction, Message
 from decimal import Decimal
 from .serializers import TransactionSerializer
 from django.utils.dateparse import parse_date
-
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.db.models import Sum, Count
+from django.contrib.auth.models import User
+import uuid
 
 
 @api_view(['POST'])
@@ -22,7 +24,6 @@ def login_view(request):
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
         
-        # بررسی صحت اعتبار
         user = authenticate(username=username, password=password)
         
         if user is not None:
@@ -36,19 +37,32 @@ def login_view(request):
 @api_view(['POST'])
 def register_view(request):
     if request.method == 'POST':
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({'message': 'User registered successfully!'}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        username = request.data.get('username')
+        email = request.data.get('email')
+        password = request.data.get('password')
 
-# لاگ‌اوت
+        if not username or not email or not password:
+            return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(username=username).exists():
+            return Response({"error": "Username already exists."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = User.objects.create_user(username=username, email=email, password=password)
+
+        if not hasattr(user, 'wallet'):
+            wallet = Wallet.objects.create(user=user, address=uuid.uuid4())  
+            wallet.save()
+            return Response({"message": "User registered successfully.", "wallet_address": str(wallet.address)}, status=status.HTTP_201_CREATED)
+        else:
+            return Response({"message": "User already has a wallet.", "wallet_address": str(user.wallet.address)}, status=status.HTTP_200_OK)
+
+
+
 @api_view(['POST'])
 def logout_view(request):
     logout(request)
     return Response({"message": "Logged out successfully"})
 
-# ویرایش پروفایل
 class ProfileEditView(APIView):
     def get(self, request):
         serializer = ProfileEditSerializer(request.user)
@@ -62,69 +76,61 @@ class ProfileEditView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
+
 @api_view(['PUT'])
-@permission_classes([IsAuthenticated])  # فقط کاربران وارد شده می‌توانند پروفایل را ویرایش کنند
-def profile_edit_view(request):
-    user = request.user
-
-    # بررسی اینکه آیا کاربر وارد شده است یا نه
-    if user.is_anonymous:
-        return Response({"error": "Authentication required to edit profile."}, status=status.HTTP_401_UNAUTHORIZED)
-
-    # داده‌های ورودی را اعتبارسنجی می‌کنیم
-    serializer = ProfileEditSerializer(user, data=request.data, partial=True)  # `partial=True` برای اختیاری بودن فیلدها
-    if serializer.is_valid():
-        serializer.save()  # ذخیره تغییرات
-        return Response({"message": "Profile updated successfully."}, status=status.HTTP_200_OK)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
-def deposit(request):
-    amount = request.data.get("amount")
-    if not amount or Decimal(amount) <= 0:
-        return Response({"error": "Invalid amount"}, status=400)
-
-    wallet = request.user.wallet
-    wallet.balance += Decimal(amount)
-    wallet.save()
-
-    Transaction.objects.create(wallet=wallet, transaction_type="deposit", amount=Decimal(amount))
-    
-    return Response({"message": "Deposit successful", "balance": wallet.balance})
+def profile_edit(request):
+    user = request.user
+    serializer = ProfileSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
 
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def transfer(request):
-    amount = request.data.get("amount")
-    recipient_address = request.data.get("recipient_address")
+    sender = request.user 
+    receiver_address = request.data.get('receiver_address') 
+    amount = request.data.get('amount')  
 
-    if not amount or Decimal(amount) <= 0:
-        return Response({"error": "Invalid amount"}, status=400)
-
-    sender_wallet = request.user.wallet
+    if not receiver_address or not amount:
+        return Response({"error": "Receiver address and amount are required."}, status=400)
 
     try:
-        receiver_wallet = Wallet.objects.get(address=recipient_address)
+        amount = Decimal(amount)
+
+        sender_wallet = Wallet.objects.get(user=sender)
+        
+        if sender_wallet.balance < amount:
+            return Response({"error": "Insufficient funds."}, status=400)
+
+        receiver_wallet = Wallet.objects.get(address=receiver_address)
+
+        Transaction.objects.create(
+            wallet=sender_wallet,
+            sender=sender_wallet,
+            receiver=receiver_wallet,
+            transaction_type='transfer',
+            amount=amount
+        )
+
+        sender_wallet.balance -= amount
+        sender_wallet.save()
+
+        receiver_wallet.balance += amount
+        receiver_wallet.save()
+
+        return Response({"message": "Transfer successful."}, status=200)
+
     except Wallet.DoesNotExist:
-        return Response({"error": "Recipient wallet not found"}, status=404)
+        return Response({"error": "Wallet not found."}, status=404)
+    except ValueError:
+        return Response({"error": "Invalid amount."}, status=400)
 
-    if sender_wallet.balance < Decimal(amount):
-        return Response({"error": "Insufficient balance"}, status=400)
-
-    sender_wallet.balance -= Decimal(amount)
-    receiver_wallet.balance += Decimal(amount)
-
-    sender_wallet.save()
-    receiver_wallet.save()
-
-    Transaction.objects.create(wallet=sender_wallet, sender=sender_wallet, receiver=receiver_wallet, transaction_type="transfer", amount=Decimal(amount))
-    Transaction.objects.create(wallet=receiver_wallet, sender=sender_wallet, receiver=receiver_wallet, transaction_type="receive", amount=Decimal(amount))
-
-    return Response({"message": "Transfer successful", "balance": sender_wallet.balance})
 
 
 class TransactionListView(generics.ListAPIView):
@@ -151,3 +157,81 @@ class TransactionListView(generics.ListAPIView):
             queryset = queryset.filter(sender__user__username=username) | queryset.filter(receiver__user__username=username)
 
         return queryset
+
+
+class WalletAddressView(APIView):
+    permission_classes = [IsAuthenticated] 
+    def get(self, request):
+        try:
+            wallet = Wallet.objects.get(user=request.user)
+            return Response({"wallet_address": str(wallet.address)}, status=status.HTTP_200_OK)
+        except Wallet.DoesNotExist:
+            return Response({"error": "Wallet not found."}, status=status.HTTP_404_NOT_FOUND)
+
+class StatisticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        transaction_count_week = Transaction.objects.filter(timestamp__gte='2025-03-01').count()
+        transaction_count_month = Transaction.objects.filter(timestamp__gte='2025-02-01').count()
+        transaction_count_year = Transaction.objects.filter(timestamp__gte='2024-03-01').count()
+
+        transaction_volume_week = Transaction.objects.filter(timestamp__gte='2025-03-01').aggregate(Sum('amount'))
+        transaction_volume_month = Transaction.objects.filter(timestamp__gte='2025-02-01').aggregate(Sum('amount'))
+        transaction_volume_year = Transaction.objects.filter(timestamp__gte='2024-03-01').aggregate(Sum('amount'))
+
+        message_count_week = Message.objects.filter(timestamp__gte='2025-03-01').count()
+        message_count_month = Message.objects.filter(timestamp__gte='2025-02-01').count()
+        message_count_year = Message.objects.filter(timestamp__gte='2024-03-01').count()
+
+        statistics = {
+            'transaction_count_week': transaction_count_week,
+            'transaction_count_month': transaction_count_month,
+            'transaction_count_year': transaction_count_year,
+            'transaction_volume_week': transaction_volume_week['amount__sum'] or 0,
+            'transaction_volume_month': transaction_volume_month['amount__sum'] or 0,
+            'transaction_volume_year': transaction_volume_year['amount__sum'] or 0,
+            'message_count_week': message_count_week,
+            'message_count_month': message_count_month,
+            'message_count_year': message_count_year,
+        }
+
+        return Response(statistics)
+    
+
+@api_view(['POST'])
+def deposit(request):
+    user = request.user 
+    amount = request.data.get('amount') 
+
+    if amount is None or amount <= 0:
+        return Response({"error": "Amount must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        amount = Decimal(amount)
+        
+        wallet = Wallet.objects.get(user=user)
+        
+        wallet.balance += amount
+        wallet.save()
+
+        return Response({"message": f"Successfully deposited {amount}. New balance is {wallet.balance}."}, status=status.HTTP_200_OK)
+    
+    except Wallet.DoesNotExist:
+        return Response({"error": "Wallet not found."}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError:
+        return Response({"error": "Invalid amount."}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated]) 
+def check_balance(request):
+    user = request.user 
+
+    try:
+        wallet = Wallet.objects.get(user=user)
+        
+        return Response({"balance": str(wallet.balance)}, status=200)
+    
+    except Wallet.DoesNotExist:
+        return Response({"error": "Wallet not found."}, status=404)

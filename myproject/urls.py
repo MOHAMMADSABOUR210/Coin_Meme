@@ -24,6 +24,5 @@ from drf_yasg import openapi
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('myapp.urls')),  # URL های API شما
-
+    path('api/', include('myapp.urls')),  
 ]
