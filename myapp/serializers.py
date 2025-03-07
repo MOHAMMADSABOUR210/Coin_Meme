@@ -1,28 +1,25 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import Transaction
+from django import forms
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
 
-
-# Serializer برای ثبت‌نام
-class RegistrationSerializer(serializers.ModelSerializer):
-    password2 = serializers.CharField(write_only=True)
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'first_name', 'last_name', 'password', 'password2']
-
-    def validate(self, data):
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError({"password": "Passwords must match."})
-        return data
+        fields = ['username', 'email', 'password']
 
     def create(self, validated_data):
-        validated_data.pop('password2')  # حذف فیلد تکرار پسورد
-        user = User.objects.create_user(**validated_data)
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
+        )
         return user
 
 class ProfileEditSerializer(serializers.ModelSerializer):

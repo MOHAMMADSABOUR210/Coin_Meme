@@ -42,11 +42,15 @@ INSTALLED_APPS = [
     'myapp',
     'drf_yasg',
     'rest_framework_swagger',  
+    'django_extensions',
+    'corsheaders',
+
 
 
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -87,7 +91,7 @@ DATABASES = {
         'USER': 'root',
         'PASSWORD' : '08d69vrbe0cVHo6qS6AMeMVN',
         'HOST' : 'bromo.liara.cloud',
-        'POST' : '34188',
+        'PORT' : '34188',
     }
 }
 
@@ -138,3 +142,6 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+CORS_ALLOW_ALL_ORIGINS = True  
