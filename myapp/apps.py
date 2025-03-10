@@ -5,4 +5,4 @@ class MyAppConfig(AppConfig):
     name = "myapp"
 
     def ready(self):
-        import myapp.signals  # ثبت سیگنال‌ها
+        import myapp.signals 

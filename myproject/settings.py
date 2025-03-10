@@ -45,13 +45,14 @@ INSTALLED_APPS = [
     'rest_framework_swagger',  
     'django_extensions',
     'corsheaders',
-
+    'django_filters',
 
 
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",  
+    "django.middleware.common.CommonMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -117,21 +118,32 @@ AUTH_PASSWORD_VALIDATORS = [
 
 
 REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
     ],
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=365),  # توکن یک سال اعتبار داشته باشد
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=365), 
     'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
 }
 
+CORS_ALLOW_CREDENTIALS = True  
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000", 
+    "https://coinmeme.liara.run", 
+]
+
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000", 
+    "https://coinmeme.liara.run", 
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Transaction
+from .models import Transaction,Message
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -57,3 +57,16 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ['id', 'transaction_type', 'amount', 'timestamp', 'sender_username', 'receiver_username']
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = ['id', 'sender', 'receiver', 'text', 'file', 'timestamp', 'is_read']
+        read_only_fields = ['sender', 'timestamp', 'is_read']
+
+class ChatListSerializer(serializers.Serializer):
+    wallet_address = serializers.CharField()
+    last_message = serializers.CharField()
+    timestamp = serializers.DateTimeField()
+    unread_count = serializers.IntegerField()
