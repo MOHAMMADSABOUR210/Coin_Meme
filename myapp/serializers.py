@@ -60,11 +60,12 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    sender_wallet_address = serializers.CharField(source='sender.wallet.address', read_only=True)
+    receiver_wallet_address = serializers.CharField(source='receiver.wallet.address', read_only=True)
+
     class Meta:
         model = Message
-        fields = ['id', 'sender', 'receiver', 'text', 'file', 'timestamp', 'is_read']
-        read_only_fields = ['sender', 'timestamp', 'is_read']
-
+        fields = ['id', 'sender_wallet_address', 'receiver_wallet_address', 'text', 'file', 'timestamp', 'is_read']
 class ChatListSerializer(serializers.Serializer):
     wallet_address = serializers.CharField()
     last_message = serializers.CharField()

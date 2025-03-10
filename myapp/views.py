@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import MultiPartParser, FormParser,JSONParser
 from django.db.models import Q, Count, Max
+from django.utils.timezone import now
 
 @api_view(['POST'])
 def login_view(request):
@@ -286,22 +287,50 @@ class TransactionListView(generics.ListAPIView):
     def get_queryset(self):
         return Transaction.objects.filter(wallet=self.request.user.wallet)
     
+class StartChatView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        receiver_wallet = request.data.get("receiver_wallet")
+        
+        try:
+            receiver = Wallet.objects.get(address=receiver_wallet).user
+        except Wallet.DoesNotExist:
+            return Response({"error": "Receiver wallet address not found"}, status=400)
+
+        Message.objects.create(
+            sender=request.user,
+            receiver=receiver,
+            text="",
+            timestamp=now(),
+            is_read=False 
+        )
+
+        return Response({
+            "username": receiver.username,
+            "wallet_address": receiver_wallet,
+            "timestamp": now()
+        }, status=201)
+
+    
 class SendMessageView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
     def post(self, request):
         receiver_wallet = request.data.get('receiver_wallet')
-        text = request.data.get('text', '')  # فقط از متن استفاده می‌کنیم
-        # فایل را حذف می‌کنیم چون نیازی به آن نداریم
+        text = request.data.get('text', '')
+
         try:
             receiver = Wallet.objects.get(address=receiver_wallet).user
         except Wallet.DoesNotExist:
             return Response({"error": "Receiver wallet address not found"}, status=400)
 
-        message = Message.objects.create(sender=request.user, receiver=receiver, text=text)  # بدون فایل
+        message = Message.objects.create(sender=request.user, receiver=receiver, text=text)
         return Response(MessageSerializer(message).data, status=201)
- 
+
+    
+
 class SendFileView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -319,34 +348,36 @@ class SendFileView(APIView):
         message = Message.objects.create(sender=request.user, receiver=receiver, text='', file=file)
         return Response(MessageSerializer(message).data, status=201)
 
-
-
 class ChatListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            chats = Message.objects.filter(Q(sender=request.user) | Q(receiver=request.user)) \
-                .values('receiver__wallet__address', 'sender__wallet__address') \
-                .annotate(
-                    last_message=Max('text'),
-                    timestamp=Max('timestamp'),
-                    unread_count=Count('id', filter=Q(receiver=request.user, is_read=False))
-                )
+        chats = Message.objects.filter(Q(sender=request.user) | Q(receiver=request.user)) \
+            .values('receiver__wallet__address', 'sender__wallet__address') \
+            .annotate(
+                last_message=Max('text'),
+                timestamp=Max('timestamp'),
+                unread_count=Count('id', filter=Q(receiver=request.user, is_read=False))
+            )
 
-            chat_list = [
-                {
-                    "wallet_address": chat["receiver__wallet__address"] if chat["receiver__wallet__address"] != request.user.wallet.address else chat["sender__wallet__address"],
-                    "last_message": chat["last_message"],
-                    "timestamp": chat["timestamp"],
-                    "unread_count": chat["unread_count"]
-                }
-                for chat in chats
-            ]
-            return Response(chat_list)
-        
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        chat_list = []
+        for chat in chats:
+            if chat["receiver__wallet__address"] == request.user.wallet.address:
+                wallet_address = chat["sender__wallet__address"]
+                user = Wallet.objects.get(address=wallet_address).user
+            else:
+                wallet_address = chat["receiver__wallet__address"]
+                user = Wallet.objects.get(address=wallet_address).user
+
+            chat_list.append({
+                "wallet_address": wallet_address,
+                "username": user.username, 
+                "last_message": chat["last_message"],
+                "timestamp": chat["timestamp"],
+                "unread_count": chat["unread_count"]
+            })
+
+        return Response(chat_list)
 
 class ChatMessagesView(APIView):
     permission_classes = [IsAuthenticated]

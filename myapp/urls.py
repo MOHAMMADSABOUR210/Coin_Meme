@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import transfer, TransactionListView,StatisticsView,WalletAddressView,CustomTokenObtainPairView ,SendMessageView, ChatListView, ChatMessagesView,SendFileView
+from .views import transfer, TransactionListView,StatisticsView,WalletAddressView,CustomTokenObtainPairView,StartChatView ,SendMessageView, ChatListView, ChatMessagesView,SendFileView
 from rest_framework_simplejwt.views import TokenRefreshView
 from myapp.views import ExportTransactionsCSVView
 
@@ -18,6 +18,7 @@ urlpatterns = [
     path('wallet/deposit/', views.deposit, name='deposit'),
     path('wallet/balance/', views.check_balance, name='check_balance'),
     path('wallet/export/csv/', ExportTransactionsCSVView.as_view(), name='export_transactions_csv'),
+    path('messages/start_chat/', StartChatView.as_view(), name='start_chat'),
     path('messages/send/', SendMessageView.as_view(), name='send_message'),
     path('messages/send-file/<str:wallet_address>/', SendFileView.as_view(), name='send_file'), 
     path('messages/chats/', ChatListView.as_view(), name='chat_list'),
