@@ -25,7 +25,6 @@ class ProfileEditSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=False, allow_blank=True)
 
     def update(self, instance, validated_data):
-        # بروزرسانی فیلدها فقط در صورت موجود بودن داده‌ها
         instance.username = validated_data.get('username', instance.username)
         instance.email = validated_data.get('email', instance.email)
         
